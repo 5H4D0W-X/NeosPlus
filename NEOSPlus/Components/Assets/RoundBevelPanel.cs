@@ -1,7 +1,6 @@
-﻿using BaseX;
-using System;
+using BaseX;
 using System.Collections.Generic;
-using System.Diagnostics.Contracts;
+using System.Linq;
 
 namespace FrooxEngine
 {
@@ -21,67 +20,77 @@ namespace FrooxEngine
             SecondaryBevel = secondarybevel;
             Iterations = iterations;
 
-
-
-
             mesh.Clear();
-            mesh.SetVertexCount(Iterations * 16 + 18); // 4 vertices per segment per corner + 4 
+            mesh.SetVertexCount(Iterations * 16 + 40); // 4 vertices per segment per corner + 16
 
             List<int> FrontSideEdge = new List<int>();
             List<int> BackSideEdge = new List<int>();
 
-            int index = 0;
+            //define "last" (but technically first) edge, this is the same as the end of the last corner (same positions but not same vertices)
+
+            mesh.SetVertex(0, new float3(Size.X / 2 - SecondaryBevel, Size.Y / -2 - PrimaryBevel, Thickness / 2));
+            mesh.SetVertex(1, new float3(Size.X / 2, Size.Y / -2 - PrimaryBevel, Thickness / 2 - SecondaryBevel));
+            mesh.SetVertex(2, new float3(Size.X / 2, Size.Y / -2 - PrimaryBevel, Thickness / -2 + SecondaryBevel));
+            mesh.SetVertex(3, new float3(Size.X / 2 - SecondaryBevel, Size.Y / -2 - PrimaryBevel, Thickness / -2));
+
+            //FrontSideEdge.Append(0);
+            //BackSideEdge.Append(3);
 
             //calculate corner meshes, add edge vertices to corresponding list
             for (int corner=0; corner < 4; corner++)
             {
-                float2 CornerMultiplier = float2.Zero;
 
                 //set positional multiplier
-                switch(corner)
-                {
-                    case 0: CornerMultiplier = new float2(1, 1); break;
-                    case 1: CornerMultiplier = new float2(-1, 1); break;
-                    case 2: CornerMultiplier = new float2(-1, -1); break;
-                    case 3: CornerMultiplier = new float2(1, 1); break;
-                }
+                float CornerAngle = corner * -90;
+
+                float2 InwardsOffset = new float2(PrimaryBevel, PrimaryBevel);
 
                 for (int segment=0; segment < iterations; segment++)
                 {
-                    //first front and back vertices
-                    var PointAF = new float3(GetSquirclePoint(0.1f, segment/(Iterations + 1)) + Size / new float2(2, 2) * CornerMultiplier, thickness / 2 - secondarybevel);
-                    var PointBF = new float3(GetSquirclePoint(0.1f, segment/(iterations + 1)) + Size / new float2(2, 2) * CornerMultiplier, thickness / -2 + secondarybevel);
-                    //second front and back vertices (going ccw)
-                    var PointAB = new float3(GetSquirclePoint(0.1f, (segment + 1)/(iterations + 1)) + Size / new float2(2, 2) * CornerMultiplier, thickness / 2 - secondarybevel);
-                    var PointBB = new float3(GetSquirclePoint(0.1f, (segment + 1)/(iterations + 1)) + Size / new float2(2, 2) * CornerMultiplier, thickness / -2 + secondarybevel);
+                    int SegmentIndex = corner * iterations * 4 + segment + 4;
 
-                    mesh.SetVertex(index, PointAF);
-                    mesh.SetVertex(index+1, PointBF);
-                    mesh.SetVertex(index+2, PointAB);
-                    mesh.SetVertex(index+3, PointBB);
+                    //the order of the vertices is always from front to back, and the edge is done CCW
 
-                    mesh.AddQuadAsTriangles(index, index + 1, index + 2, index + 3);
+                    float3 v1 = new float3(MathX.Rotate(Size / 2 - InwardsOffset + GetSquirclePoint(PrimaryBevel, (segment) / Iterations, SecondaryBevel), CornerAngle), Thickness / 2);
+                    float3 v2 = new float3(MathX.Rotate(Size / 2 - InwardsOffset + GetSquirclePoint(PrimaryBevel, (segment) / Iterations), CornerAngle), Thickness / 2 - SecondaryBevel);
+                    float3 v3 = new float3(MathX.Rotate(Size / 2 - InwardsOffset + GetSquirclePoint(PrimaryBevel, (segment) / Iterations), CornerAngle), Thickness / -2 + SecondaryBevel);
+                    float3 v4 = new float3(MathX.Rotate(Size / 2 - InwardsOffset + GetSquirclePoint(PrimaryBevel, (segment) / Iterations, SecondaryBevel), CornerAngle), Thickness / -2);
 
-                    index += 2; // every corner point gets set twice, I hope it's not a problem but I haven't tested it
+                    mesh.SetVertex(SegmentIndex, v1);
+                    mesh.SetVertex(SegmentIndex + 1, v2);
+                    mesh.SetVertex(SegmentIndex + 2, v3);
+                    mesh.SetVertex(SegmentIndex + 3, v4);
+
+                    mesh.AddQuadAsTriangles(SegmentIndex - 4, SegmentIndex - 3, SegmentIndex, SegmentIndex + 1);
+                    mesh.AddQuadAsTriangles(SegmentIndex - 3, SegmentIndex - 2, SegmentIndex + 1, SegmentIndex + 2);
+                    mesh.AddQuadAsTriangles(SegmentIndex - 2, SegmentIndex - 1, SegmentIndex + 2, SegmentIndex + 3);
+
+                    FrontSideEdge.Append(SegmentIndex);
+                    BackSideEdge.Append(SegmentIndex + 3);
 
                 }
             }
+
+            mesh.AddTriangleFan(FrontSideEdge);
+            mesh.AddTriangleFan(BackSideEdge);
+            mesh.RecalculateNormals();
+            mesh.RecalculateTangents();
         }
 
         public override void Update()
-        { 
+        {
         }
 
-        private float2 GetSquirclePoint(float radius, float lerp)
+        private float2 GetSquirclePoint(float radius, float lerp, float offset = 0)
         {
             //I'm using superellipses instead of circular corners because it looks better, but it's making bevelling more difficult
 
-            float Lerp = lerp * 4 * MathX.PI;
+            float Lerp = lerp * 0.5f * MathX.PI;
 
-            float PointX = radius * MathX.Sign(MathX.Cos(Lerp)) * MathX.Pow(MathX.Abs(MathX.Cos(Lerp)), 0.75f);
-            float PointY = radius * MathX.Sign(MathX.Sin(Lerp)) * MathX.Pow(MathX.Abs(MathX.Sin(Lerp)), 0.75f);
+            float2 Derivative = new float2(-0.75f * MathX.Sin(Lerp) * MathX.Pow(MathX.Cos(Lerp),-0.25f), 0.75f * MathX.Cos(Lerp) * MathX.Pow(MathX.Sin(Lerp), -0.25f));
+            float2 Normal = MathX.Rotate90CCW(Derivative.Normalized);
 
-            float2 Point = new float2(PointX, PointY);
+            float2 Point = new float2(radius * MathX.Pow(MathX.Cos(Lerp), 0.75f), radius * MathX.Pow(MathX.Sin(Lerp), 0.75f)) + Normal * offset;
 
             return Point;
         }
