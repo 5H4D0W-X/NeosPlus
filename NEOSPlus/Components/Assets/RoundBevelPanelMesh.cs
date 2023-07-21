@@ -12,9 +12,9 @@ namespace FrooxEngine
     {
         [Range(1, 64)] public readonly Sync<int> Sides;
         public readonly Sync<float2> Size;
-        [Range(0.01f, 0.1f)] public readonly Sync<float> Thickness;
+        [Range(0.01f, 0.2f)] public readonly Sync<float> Thickness;
         [Range(0.01f, 0.5f)] public readonly Sync<float> CornerSize;
-        [Range(0.01f, 0.5f)] public readonly Sync<float> EdgeBevel;
+        [Range(0f, 0.1f)] public readonly Sync<float> EdgeBevel;
 
         private RoundBevelPanel panel;
         private int _sides;
@@ -30,7 +30,7 @@ namespace FrooxEngine
             Size.Value = new float2(0.5f, 0.5f);
             Thickness.Value = 0.025f;
             CornerSize.Value = 0.1f;
-            EdgeBevel.Value = 0.01f;
+            EdgeBevel.Value = 0.005f;
         }
 
         protected override void PrepareAssetUpdateData()
